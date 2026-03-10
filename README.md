@@ -1,6 +1,11 @@
 # Face project
-This project is my experiment using existing models to detects facial features.
+This project is my experiment using existing models to detect facial features and relevant phenomenon.
 
-# open_mouth
-open_mouth is the first feature I work on. It has one simple goal which is to detect if the person in camera is opening their mouth or not.
+## drowsy
+drowsy is my current work, which is a PERCLOS-adjacent detection (currently with MAR and EAR) to detect drowsiness from camera feed.
+
+## Running it
+See [drowsy/drowsy.md](drowsy/drowsy.md)
+
+
 

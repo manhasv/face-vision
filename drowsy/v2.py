@@ -10,10 +10,15 @@ INNER_TOP = [13]
 INNER_BOTTOM = [14]
 INNER_LEFT = 78
 INNER_RIGHT = 308
-ALL = INNER_TOP + INNER_BOTTOM + [INNER_LEFT, INNER_RIGHT]
+MOUTH = INNER_TOP + INNER_BOTTOM + [INNER_LEFT, INNER_RIGHT]
+LEFT_EYE = [362, 385, 387, 263, 373, 380]
+RIGHT_EYE = [33, 160, 158, 133, 153, 144]
+ALL = MOUTH + LEFT_EYE + RIGHT_EYE
 
 REAL_MOUTH_WIDTH_CM = 5.0
 
+# Required model for this script
+# Find more at: https://ai.google.dev/edge/mediapipe/solutions/vision/face_landmarker
 model_path = str(Path(__file__).parent.parent / 'models' / 'face_landmarker.task')
 
 BaseOptions = mp.tasks.BaseOptions

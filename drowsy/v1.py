@@ -3,6 +3,8 @@ import dlib
 import math
 from pathlib import Path
 
+# **This script uses dlib instead of Mediapipe Face Landmarker**
+
 # The detector finds the face rectangle
 detector = dlib.get_frontal_face_detector()
 # The predictor finds the 68 specific points inside the face rect
@@ -40,7 +42,7 @@ while True:
         for p in [top_lip, bottom_lip, left_corner, right_corner]:
             cv2.circle(frame, (p.x, p.y), 3, (0, 255, 0), -1)
 
-        # Logic here
+        # Logic for calc here
         vertical_dist = calculate_distance(top_lip, bottom_lip)
         horizontal_dist = calculate_distance(left_corner, right_corner)
 
