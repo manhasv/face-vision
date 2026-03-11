@@ -4,4 +4,4 @@
 
 **v2** — I switched to MediaPipe, added MAR for more reliable detection
 
-**v3** — refactored, adding EAR for eye tracking toward full PERCLOS
+**v3** — refactored, adding EAR for eye tracking toward full PERCLOS. Also after more work, MAR was used as a secondary signal but I found it unreliable without speech/duration context. For now, MAR is dropped in favor of EAR-based PERCLOS.

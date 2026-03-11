@@ -5,6 +5,9 @@ import mediapipe as mp
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 import numpy as np
+from collections import deque
+
+
 
 # Face Locators Vars
 INNER_TOP = [13]
@@ -15,7 +18,9 @@ MOUTH = INNER_TOP + INNER_BOTTOM + [INNER_LEFT, INNER_RIGHT]
 LEFT_EYE = [362, 385, 387, 263, 373, 380]
 RIGHT_EYE = [33, 160, 158, 133, 153, 144]
 ALL = MOUTH + LEFT_EYE + RIGHT_EYE
+
 REAL_MOUTH_WIDTH_CM = 5.0
+EAR_WINDOW = deque(maxlen=60)
 
 model_path = str(Path(__file__).parent.parent / 'models' / 'face_landmarker.task')
 BaseOptions = mp.tasks.BaseOptions
@@ -29,40 +34,30 @@ latest_landmarks = [None] # avoid local var and maybe useful for future
 def to_pixel(p, frame_width, frame_height):
     return np.array([p.x * frame_width, p.y * frame_height])
 
-# MAR stands for Mouth Aspect Ratio with MAR = vertical / horizontal
-# Source: https://www.researchgate.net/figure/Formula-for-calculating-Mouth-Aspect-Ratio_fig4_372852414
-# My implementation is a oversimplified version of this where I only use a few locators.
-def compute_mar(landmarks, frame_width, frame_height):
-    # Average top and bottom lip positions at y-coord
-    # calculate relevant variables and calculate mar
-    top_y = np.mean([to_pixel(landmarks[i], frame_width, frame_height)[1] for i in INNER_TOP])
-    bottom_y = np.mean([to_pixel(landmarks[i], frame_width, frame_height)[1] for i in INNER_BOTTOM])
+# EAR stands for Eye Aspect Ratio
+def compute_ear(landmarks, frame_width, frame_height):
 
-    vertical = bottom_y - top_y
-    left = to_pixel(landmarks[INNER_LEFT], frame_width, frame_height)
-    right = to_pixel(landmarks[INNER_RIGHT], frame_width, frame_height)
-    horizontal = np.linalg.norm(right - left)
+    p1 = to_pixel(landmarks[LEFT_EYE[0]], frame_width, frame_height)
+    p2 = to_pixel(landmarks[LEFT_EYE[1]], frame_width, frame_height)
+    p3 = to_pixel(landmarks[LEFT_EYE[2]], frame_width, frame_height)
+    p4 = to_pixel(landmarks[LEFT_EYE[3]], frame_width, frame_height)
+    p5 = to_pixel(landmarks[LEFT_EYE[4]], frame_width, frame_height)
+    p6 = to_pixel(landmarks[LEFT_EYE[5]], frame_width, frame_height)
 
-    mar = vertical / horizontal
+    ear_left = (np.linalg.norm(p2 - p6) + np.linalg.norm(p3 - p5)) / (2 * np.linalg.norm(p1 - p4))
 
-    return mar
+    p1 = to_pixel(landmarks[RIGHT_EYE[0]], frame_width, frame_height)
+    p2 = to_pixel(landmarks[RIGHT_EYE[1]], frame_width, frame_height)
+    p3 = to_pixel(landmarks[RIGHT_EYE[2]], frame_width, frame_height)
+    p4 = to_pixel(landmarks[RIGHT_EYE[3]], frame_width, frame_height)
+    p5 = to_pixel(landmarks[RIGHT_EYE[4]], frame_width, frame_height)
+    p6 = to_pixel(landmarks[RIGHT_EYE[5]], frame_width, frame_height)
 
-def estimate_distance(landmarks, frame_width, frame_height, focal_length):
-    left = np.array([landmarks[INNER_LEFT].x * frame_width, landmarks[INNER_LEFT].y * frame_height])
-    right = np.array([landmarks[INNER_RIGHT].x * frame_width, landmarks[INNER_RIGHT].y * frame_height])
-    pixel_width = np.linalg.norm(right - left)
+    ear_right = (np.linalg.norm(p2 - p6) + np.linalg.norm(p3 - p5)) / (2 * np.linalg.norm(p1 - p4))
 
-    if pixel_width == 0:
-        return None  # avoid division by zero
-    distance_cm = REAL_MOUTH_WIDTH_CM * focal_length / pixel_width
-    return distance_cm
+    ear = (ear_left + ear_right) / 2
 
-def estimate_relative_distance(landmarks):
-    # Average z of inner lips (negative z = closer)
-    z_values = [landmarks[i].z for i in ALL]
-    avg_z = np.mean(z_values)
-    # Flip sign so closer faces are higher positive value (optional)
-    return -avg_z
+    return ear
 
 # call back func, I need to do sth here
 # for now, extract the landmarks value
@@ -81,12 +76,13 @@ def main():
 
         cap = cv2.VideoCapture(0)
 
-        # while true, read frame, convert to mp image then detect then show
+        # read frame, convert to mp image then detect then show
         while True:
             ret, frame = cap.read()
             if not ret:
                 print("Error: Can't receive frame (Hint: maybe camera is off?)")
                 break
+
             frame = cv2.flip(frame, 1)
             frame_height = frame.shape[0]
             frame_width  = frame.shape[1]
@@ -103,17 +99,17 @@ def main():
                     x = int(latest_landmarks[0][p].x * frame_width)
                     y = int(latest_landmarks[0][p].y * frame_height)
                     cv2.circle(frame, (x, y), 3, (0, 255, 0), -1)
-                mar = compute_mar(latest_landmarks[0], frame_width, frame_height)
-                threshold = 0.3
-                if mar > threshold:
-                    cv2.putText(frame, "OPEN", (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,255), 2)
-                else:
-                    cv2.putText(frame, "CLOSED", (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2)
-                
-                # Rough relative distance using z-coordinates
-                rel_distance = 20 * estimate_relative_distance(latest_landmarks[0])
-                cv2.putText(frame, f"Rel Dist: {rel_distance:.3f}", (50, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
 
+                ear = compute_ear(latest_landmarks[0], frame_width, frame_height)
+                ear_threshold = 0.25
+
+                EAR_WINDOW.append(ear)
+
+                perclos = sum(1 for e in EAR_WINDOW if e < ear_threshold) / len(EAR_WINDOW)
+                
+                # if perclos is over 80% it is high chance the user's eyes "droops" - a classic sign of drowy
+                if perclos > 0.8:
+                    cv2.putText(frame, "User is drowsy", (50,150), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,255), 2)
 
             cv2.imshow("demo", frame)
 
